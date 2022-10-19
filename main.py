@@ -21,9 +21,9 @@ class SMZDM_Bot(object):
         'Sec-Fetch-Site': 'same-site',
         'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                        'AppleWebKit/537.36 (KHTML, like Gecko) '
-                       'Chrome/74.0.3729.131 Safari/537.36'),
+                       'Chrome/106.0.0.0 Safari/537.36 Edg/106.0.1370.42'),
     }
-
+    
     def __init__(self):
         self.session = requests.Session()
         self.session.headers = self.DEFAULT_HEADERS
