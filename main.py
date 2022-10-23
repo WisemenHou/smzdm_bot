@@ -1,10 +1,17 @@
 import json
 import os
 import sys
-from pprint import pprint
+from pathlib import Path
+from pprint import pp, pprint
 
+import prettytable as pt
 import requests
-from notifications.pushplus import pushplus
+
+from notify.notify import NotifyBot
+from utils.file_helper import TomlHelper
+
+CURRENT_PATH = Path(__file__).parent.resolve()
+CONFIG_PATH = Path(CURRENT_PATH, 'config')
 
 
 class SMZDM_Bot(object):
@@ -40,11 +47,17 @@ class SMZDM_Bot(object):
         if resp.status_code == 200:
             resp_data = resp.json()["data"]
             checkin_num = resp_data["checkin_num"]
+            days_of_week = resp_data["continue_checkin_days"]
             gold = resp_data["gold"]
             point = resp_data["point"]
             exp = resp_data["exp"]
             rank = resp_data["rank"]
             cards = resp_data["cards"]
+            tb = pt.PrettyTable()
+            tb.field_names = ["签到天数", "星期", "金币", "积分", "经验", "等级", "补签卡"]
+            tb.add_row([checkin_num, days_of_week,
+                       gold, point, exp, rank, cards])
+            pprint(tb)
             msg = f'''⭐签到成功{checkin_num}天
             🏅金币{gold}
             🏅积分{point}
@@ -54,30 +67,45 @@ class SMZDM_Bot(object):
             return msg
         else:
             pprint("Faile to sign in")
-
-
-if __name__ == '__main__':
-    smzdm_bot = SMZDM_Bot()
-    if not os.environ.get("SMZDM_COOKIE", None):
-        current_dir = os.path.dirname(os.path.realpath(__file__))
-        cookies_file_path = os.path.join(current_dir, 'cookies.json')
-        if not os.path.exists(cookies_file_path):
-            pprint("Cookies not existed, exit")
             sys.exit(1)
-        with open("cookies.json", "r") as f:
+
+
+def main():
+    smzdm_bot = SMZDM_Bot()
+    conf_kwargs = {}
+
+    if Path.exists(Path(CONFIG_PATH, "config.toml")):
+        pprint("Get configration from config.toml")
+        conf_kwargs = TomlHelper(Path(CONFIG_PATH, "config.toml")).read()
+        SMZDM_COOKIE = conf_kwargs.get(
+            "SMZDM_COOKIE").encode('UTF-8').decode('latin-1')
+        smzdm_bot.set_cookies(SMZDM_COOKIE)
+    elif os.environ.get("SMZDM_COOKIE", None):
+        pprint("Get configration from env")
+        conf_kwargs = {
+            "SMZDM_COOKIE": os.environ.get("SMZDM_COOKIE"),
+            "PUSH_PLUS_TOKEN": os.environ.get("PUSH_PLUS_TOKEN", None),
+            "SC_KEY": os.environ.get("SC_KEY", None),
+            "TG_BOT_TOKEN": os.environ.get("TG_BOT_TOKEN", None),
+            "TG_USER_ID": os.environ.get("TG_USER_ID", None),
+        }
+        SMZDM_COOKIE = conf_kwargs.get(
+            "SMZDM_COOKIE").encode('UTF-8').decode('latin-1')
+        smzdm_bot.set_cookies(SMZDM_COOKIE)
+    elif Path.exists(Path(CONFIG_PATH, "cookies.json")):
+        pprint("Load cookis from cookies.json")
+        with open(Path(CONFIG_PATH, "cookies.json", "r")) as f:
             cookies = json.load(f)
         smzdm_cookies = {}
         for cookie in cookies:
             smzdm_cookies.update({cookie["name"]: cookie["value"]})
         smzdm_bot.update_cookies(smzdm_cookies)
     else:
-        smzdm_cookies = os.environ.get(
-            "SMZDM_COOKIE").encode('UTF-8').decode('latin-1')
-        smzdm_bot.set_cookies(smzdm_cookies)
-    resp = smzdm_bot.checkin()
-    if not os.environ.get('PUSH_PLUS_TOKEN'):
-        pprint("Skip PushPlus notication")
-    else:
-        title = '什么值得买每日签到'
-        token = os.environ.get('PUSH_PLUS_TOKEN')
-        pushplus(title=title, content=resp, token=token)
+        pprint("Fail to get SMZDM_COOKIE, exit")
+        sys.exit(1)
+    msg = smzdm_bot.checkin()
+    NotifyBot(content=msg, **conf_kwargs)
+
+
+if __name__ == '__main__':
+    main()
